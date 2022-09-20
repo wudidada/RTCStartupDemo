@@ -13,8 +13,8 @@ var pc = null; // webrtc RTCPeerConnection
 
 var room = prompt('Enter room name:');
 
-// var socket = io('http://localhost:8080/socket.io');
-var socket = io('http://rtc-signal.jhuster.com:8080/socket.io');
+var socket = io('http://137.184.187.229:8080/socket.io');
+// var socket = io('http://rtc-signal.jhuster.com:8080/socket.io');
 
 if (room !== '') {
     console.log('Attempted to join room:', localUserId, room);
