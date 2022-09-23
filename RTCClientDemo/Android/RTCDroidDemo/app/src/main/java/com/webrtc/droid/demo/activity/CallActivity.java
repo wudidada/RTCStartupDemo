@@ -1,6 +1,7 @@
 package com.webrtc.droid.demo.activity;
 
 import android.content.Context;
+import android.graphics.Color;
 import android.os.Bundle;
 import androidx.appcompat.app.AppCompatActivity;
 import android.util.Log;
@@ -18,10 +19,13 @@ import org.webrtc.AudioTrack;
 import org.webrtc.Camera1Enumerator;
 import org.webrtc.Camera2Enumerator;
 import org.webrtc.CameraEnumerator;
+import org.webrtc.CryptoOptions;
 import org.webrtc.DataChannel;
 import org.webrtc.DefaultVideoDecoderFactory;
 import org.webrtc.DefaultVideoEncoderFactory;
 import org.webrtc.EglBase;
+import org.webrtc.FrameDecryptor;
+import org.webrtc.FrameEncryptor;
 import org.webrtc.IceCandidate;
 import org.webrtc.Logging;
 import org.webrtc.MediaConstraints;
@@ -75,6 +79,9 @@ public class CallActivity extends AppCompatActivity {
     private AudioTrack mAudioTrack;
 
     private VideoCapturer mVideoCapturer;
+
+    private FrameEncryptor encryptor;
+    private FrameDecryptor decryptor;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -301,6 +308,12 @@ public class CallActivity extends AppCompatActivity {
     public PeerConnection createPeerConnection() {
         Log.i(TAG, "Create PeerConnection ...");
         PeerConnection.RTCConfiguration configuration = new PeerConnection.RTCConfiguration(new ArrayList<>());
+
+        CryptoOptions.Builder cryptoOptionBuilder = CryptoOptions.builder();
+        cryptoOptionBuilder.setRequireFrameEncryption(true);
+        CryptoOptions cryptoOptions = cryptoOptionBuilder.createCryptoOptions();
+        configuration.cryptoOptions = cryptoOptions;
+
         PeerConnection connection = mPeerConnectionFactory.createPeerConnection(configuration, mPeerConnectionObserver);
         if (connection == null) {
             Log.e(TAG, "Failed to createPeerConnection !");
@@ -441,6 +454,7 @@ public class CallActivity extends AppCompatActivity {
         @Override
         public void onAddTrack(RtpReceiver rtpReceiver, MediaStream[] mediaStreams) {
             MediaStreamTrack track = rtpReceiver.track();
+//            rtpReceiver.setFrameDecryptor(decryptor);
             if (track instanceof VideoTrack) {
                 Log.i(TAG, "onAddVideoTrack");
                 VideoTrack remoteVideoTrack = (VideoTrack) track;
@@ -551,6 +565,7 @@ public class CallActivity extends AppCompatActivity {
             public void run() {
                 String output = mLogcatView.getText() + "\n" + msg;
                 mLogcatView.setText(output);
+                mLogcatView.setTextColor(Color.RED);
             }
         });
     }
