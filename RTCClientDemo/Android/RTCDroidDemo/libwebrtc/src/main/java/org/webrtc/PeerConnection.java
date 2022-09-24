@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import org.webrtc.CandidatePairChangeEvent;
@@ -851,6 +852,38 @@ public class PeerConnection {
   private List<RtpReceiver> receivers = new ArrayList<>();
   private List<RtpTransceiver> transceivers = new ArrayList<>();
 
+  private boolean encryptFrame = false;
+
+  public void setEncryptFrame(boolean encryptFrame) {
+    this.encryptFrame = encryptFrame;
+  }
+
+  private int[] encryptKey;
+
+  public void setDecryptKey(int[] decryptKey) {
+    this.decryptKey = decryptKey;
+  }
+
+  private int[] decryptKey;
+
+  public void setEncryptKey(int[] encryptKey) {
+    this.encryptKey = encryptKey;
+  }
+
+  public void setFrameDecryptor() {
+    if (!encryptFrame) {
+      return;
+    }
+    Iterator var2 = this.getReceivers().iterator();
+
+    while(var2.hasNext()) {
+      RtpReceiver receiver = (RtpReceiver)var2.next();
+      SimpleFrameDecryptor decryptor = new SimpleFrameDecryptor();
+      decryptor.setKey(decryptKey);
+      receiver.setFrameDecryptor(decryptor);
+    }
+  }
+
   /**
    * Wraps a PeerConnection created by the factory. Can be used by clients that want to implement
    * their PeerConnection creation in JNI.
@@ -1079,6 +1112,11 @@ public class PeerConnection {
     RtpSender newSender = nativeAddTrack(track.getNativeMediaStreamTrack(), streamIds);
     if (newSender == null) {
       throw new IllegalStateException("C++ addTrack failed.");
+    }
+    if (encryptFrame) {
+      SimpleFrameEncryptor encryptor = new SimpleFrameEncryptor();
+      encryptor.setKey(encryptKey);
+      newSender.setFrameEncryptor(encryptor);
     }
     senders.add(newSender);
     return newSender;

@@ -24,8 +24,8 @@ import org.webrtc.DataChannel;
 import org.webrtc.DefaultVideoDecoderFactory;
 import org.webrtc.DefaultVideoEncoderFactory;
 import org.webrtc.EglBase;
-import org.webrtc.FrameDecryptor;
-import org.webrtc.FrameEncryptor;
+import org.webrtc.GCMFrameDecryptor;
+import org.webrtc.GCMFrameEncryptor;
 import org.webrtc.IceCandidate;
 import org.webrtc.Logging;
 import org.webrtc.MediaConstraints;
@@ -37,6 +37,8 @@ import org.webrtc.RendererCommon;
 import org.webrtc.RtpReceiver;
 import org.webrtc.SdpObserver;
 import org.webrtc.SessionDescription;
+import org.webrtc.SimpleFrameDecryptor;
+import org.webrtc.SimpleFrameEncryptor;
 import org.webrtc.SurfaceTextureHelper;
 import org.webrtc.SurfaceViewRenderer;
 import org.webrtc.VideoCapturer;
@@ -80,11 +82,12 @@ public class CallActivity extends AppCompatActivity {
 
     private VideoCapturer mVideoCapturer;
 
-    private FrameEncryptor encryptor;
-    private FrameDecryptor decryptor;
+    private boolean enryptFrame = true;
+    int[] myIntArray = {12, 234, 443};
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_call);
 
@@ -309,15 +312,25 @@ public class CallActivity extends AppCompatActivity {
         Log.i(TAG, "Create PeerConnection ...");
         PeerConnection.RTCConfiguration configuration = new PeerConnection.RTCConfiguration(new ArrayList<>());
 
-        CryptoOptions.Builder cryptoOptionBuilder = CryptoOptions.builder();
-        cryptoOptionBuilder.setRequireFrameEncryption(true);
-        CryptoOptions cryptoOptions = cryptoOptionBuilder.createCryptoOptions();
-        configuration.cryptoOptions = cryptoOptions;
+        // TODO encrypt
+        if (enryptFrame) {
+            CryptoOptions.Builder cryptoOptionBuilder = CryptoOptions.builder();
+            cryptoOptionBuilder.setRequireFrameEncryption(true);
+            CryptoOptions cryptoOptions = cryptoOptionBuilder.createCryptoOptions();
+            configuration.cryptoOptions = cryptoOptions;
+        }
 
         PeerConnection connection = mPeerConnectionFactory.createPeerConnection(configuration, mPeerConnectionObserver);
         if (connection == null) {
             Log.e(TAG, "Failed to createPeerConnection !");
             return null;
+        }
+
+        // TODO encrypt
+        if (enryptFrame) {
+            connection.setEncryptFrame(true);
+            connection.setEncryptKey(myIntArray);
+            connection.setDecryptKey(myIntArray);
         }
         connection.addTrack(mVideoTrack);
         connection.addTrack(mAudioTrack);
@@ -409,7 +422,9 @@ public class CallActivity extends AppCompatActivity {
         @Override
         public void onIceCandidate(IceCandidate iceCandidate) {
             Log.i(TAG, "onIceCandidate: " + iceCandidate);
-
+            if (enryptFrame) {
+                mPeerConnection.setFrameDecryptor();
+            }
             try {
                 JSONObject message = new JSONObject();
                 message.put("userId", RTCSignalClient.getInstance().getUserId());
@@ -454,7 +469,9 @@ public class CallActivity extends AppCompatActivity {
         @Override
         public void onAddTrack(RtpReceiver rtpReceiver, MediaStream[] mediaStreams) {
             MediaStreamTrack track = rtpReceiver.track();
-//            rtpReceiver.setFrameDecryptor(decryptor);
+            // TODO encrypt
+            // not work here
+//            if (isDecrypt)             rtpReceiver.setFrameDecryptor(decryptor);
             if (track instanceof VideoTrack) {
                 Log.i(TAG, "onAddVideoTrack");
                 VideoTrack remoteVideoTrack = (VideoTrack) track;
