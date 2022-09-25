@@ -878,8 +878,7 @@ public class PeerConnection {
 
     while(var2.hasNext()) {
       RtpReceiver receiver = (RtpReceiver)var2.next();
-      SimpleFrameDecryptor decryptor = new SimpleFrameDecryptor();
-      decryptor.setKey(decryptKey);
+      FrameDecryptor decryptor = new GeneralFrameDecryptor();
       receiver.setFrameDecryptor(decryptor);
     }
   }
@@ -1114,8 +1113,7 @@ public class PeerConnection {
       throw new IllegalStateException("C++ addTrack failed.");
     }
     if (encryptFrame) {
-      SimpleFrameEncryptor encryptor = new SimpleFrameEncryptor();
-      encryptor.setKey(encryptKey);
+      FrameEncryptor encryptor = new GeneralFrameEncryptor();
       newSender.setFrameEncryptor(encryptor);
     }
     senders.add(newSender);
