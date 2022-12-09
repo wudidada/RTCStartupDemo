@@ -3,11 +3,12 @@ package com.webrtc.droid.demo.activity;
 import android.content.Context;
 import android.graphics.Color;
 import android.os.Bundle;
-import androidx.appcompat.app.AppCompatActivity;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
+
+import androidx.appcompat.app.AppCompatActivity;
 
 import com.webrtc.droid.demo.R;
 import com.webrtc.droid.demo.signal.RTCSignalClient;
@@ -24,8 +25,6 @@ import org.webrtc.DataChannel;
 import org.webrtc.DefaultVideoDecoderFactory;
 import org.webrtc.DefaultVideoEncoderFactory;
 import org.webrtc.EglBase;
-import org.webrtc.GCMFrameDecryptor;
-import org.webrtc.GCMFrameEncryptor;
 import org.webrtc.IceCandidate;
 import org.webrtc.Logging;
 import org.webrtc.MediaConstraints;
@@ -33,12 +32,13 @@ import org.webrtc.MediaStream;
 import org.webrtc.MediaStreamTrack;
 import org.webrtc.PeerConnection;
 import org.webrtc.PeerConnectionFactory;
+import org.webrtc.RTCStats;
+import org.webrtc.RTCStatsCollectorCallback;
+import org.webrtc.RTCStatsReport;
 import org.webrtc.RendererCommon;
 import org.webrtc.RtpReceiver;
 import org.webrtc.SdpObserver;
 import org.webrtc.SessionDescription;
-import org.webrtc.SimpleFrameDecryptor;
-import org.webrtc.SimpleFrameEncryptor;
 import org.webrtc.SurfaceTextureHelper;
 import org.webrtc.SurfaceViewRenderer;
 import org.webrtc.VideoCapturer;
@@ -50,6 +50,9 @@ import org.webrtc.VideoSource;
 import org.webrtc.VideoTrack;
 
 import java.util.ArrayList;
+import java.util.Map;
+import java.util.Timer;
+import java.util.TimerTask;
 import java.util.UUID;
 
 public class CallActivity extends AppCompatActivity {
@@ -59,6 +62,8 @@ public class CallActivity extends AppCompatActivity {
     private static final int VIDEO_FPS = 30;
 
     private TextView mLogcatView;
+    private TextView mAudioRateView;
+
     private Button mStartCallBtn;
     private Button mEndCallBtn;
 
@@ -82,8 +87,11 @@ public class CallActivity extends AppCompatActivity {
 
     private VideoCapturer mVideoCapturer;
 
-    private boolean enryptFrame = true;
+    private boolean enryptFrame = false;
     int[] myIntArray = {12, 234, 443};
+
+    private double timestampPrev = 0;
+    private long bytesPrev = 0;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -92,6 +100,8 @@ public class CallActivity extends AppCompatActivity {
         setContentView(R.layout.activity_call);
 
         mLogcatView = findViewById(R.id.LogcatView);
+        mAudioRateView = findViewById(R.id.AudioRateView);
+
         mStartCallBtn = findViewById(R.id.StartCallButton);
         mEndCallBtn = findViewById(R.id.EndCallButton);
 
@@ -138,6 +148,14 @@ public class CallActivity extends AppCompatActivity {
         AudioSource audioSource = mPeerConnectionFactory.createAudioSource(new MediaConstraints());
         mAudioTrack = mPeerConnectionFactory.createAudioTrack(AUDIO_TRACK_ID, audioSource);
         mAudioTrack.setEnabled(true);
+        audioRateOnUI("hlelllll");
+
+        Timer timer = new Timer();
+        timer.schedule(new TimerTask() {
+            public void run() {
+                showRemoteStats();
+            }
+        }, 1000, 1000);
     }
 
     @Override
@@ -169,7 +187,7 @@ public class CallActivity extends AppCompatActivity {
         RTCSignalClient.getInstance().leaveRoom();
     }
 
-    public static class ProxyVideoSink implements VideoSink {
+    public class ProxyVideoSink implements VideoSink {
         private VideoSink mTarget;
         @Override
         synchronized public void onFrame(VideoFrame frame) {
@@ -182,6 +200,47 @@ public class CallActivity extends AppCompatActivity {
         synchronized void setTarget(VideoSink target) {
             this.mTarget = target;
         }
+    }
+
+    private void showRemoteStats() {
+        if (mPeerConnection == null) {
+            return;
+        }
+        mPeerConnection.getStats(new RTCStatsCollectorCallback() {
+            @Override
+            public void onStatsDelivered(RTCStatsReport report) {
+                String audioRate = getAudioRate(report);
+                if (audioRate != null)
+                    audioRateOnUI(audioRate);
+            }
+        });
+    }
+
+    private String getAudioRate(RTCStatsReport report) {
+        Map<String, RTCStats> statsMap = report.getStatsMap();
+        for (RTCStats stats : statsMap.values()) {
+            Map<String, Object> members = stats.getMembers();
+            if (stats.getType().equals("inbound-rtp") && members.get("kind").toString().equals("audio")) {
+                double now = stats.getTimestampUs();
+                Log.e(TAG, "members: " + members.toString());
+
+                StringBuilder sb = new StringBuilder();
+                Long bytes = Long.parseLong(members.get("bytesReceived").toString());
+                sb.append(bytes - bytesPrev).append("bytes").append("\n");
+                sb.append(now - timestampPrev).append("us").append("\n");
+                double bitrate = 0;
+                if (timestampPrev != 0) {
+                    bitrate = (bytes - bytesPrev) * 1000000 / (now - timestampPrev);
+                    bitrate = Math.floor(bitrate);
+                }
+                bytesPrev = bytes;
+                timestampPrev = now;
+
+                sb.append(bitrate + " kb/sec");
+                return sb.toString();
+            }
+        }
+        return "hello";
     }
 
     public static class SimpleSdpObserver implements SdpObserver {
@@ -583,6 +642,17 @@ public class CallActivity extends AppCompatActivity {
                 String output = mLogcatView.getText() + "\n" + msg;
                 mLogcatView.setText(output);
                 mLogcatView.setTextColor(Color.RED);
+            }
+        });
+    }
+
+    private void audioRateOnUI(String msg) {
+        Log.i(TAG, msg);
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                mAudioRateView.setText(msg);
+                mAudioRateView.setTextColor(Color.RED);
             }
         });
     }
