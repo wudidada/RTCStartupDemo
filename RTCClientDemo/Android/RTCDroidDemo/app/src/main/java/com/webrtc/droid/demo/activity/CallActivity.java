@@ -62,7 +62,7 @@ public class CallActivity extends AppCompatActivity {
     private static final int VIDEO_FPS = 30;
 
     private TextView mLogcatView;
-    private TextView mAudioRateView;
+    private TextView mInfoView;
 
     private Button mStartCallBtn;
     private Button mEndCallBtn;
@@ -90,8 +90,13 @@ public class CallActivity extends AppCompatActivity {
     private boolean enryptFrame = false;
     int[] myIntArray = {12, 234, 443};
 
-    private double timestampPrev = 0;
-    private long bytesPrev = 0;
+    private double audioTimestampPrev = 0;
+    private long audioBytesPrev = 0;
+
+    private double videoTimestampPrev = 0;
+    private long videoBytesPrev = 0;
+
+    private String audioCodec = null;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -100,7 +105,7 @@ public class CallActivity extends AppCompatActivity {
         setContentView(R.layout.activity_call);
 
         mLogcatView = findViewById(R.id.LogcatView);
-        mAudioRateView = findViewById(R.id.AudioRateView);
+        mInfoView = findViewById(R.id.InfoView);
 
         mStartCallBtn = findViewById(R.id.StartCallButton);
         mEndCallBtn = findViewById(R.id.EndCallButton);
@@ -148,7 +153,6 @@ public class CallActivity extends AppCompatActivity {
         AudioSource audioSource = mPeerConnectionFactory.createAudioSource(new MediaConstraints());
         mAudioTrack = mPeerConnectionFactory.createAudioTrack(AUDIO_TRACK_ID, audioSource);
         mAudioTrack.setEnabled(true);
-        audioRateOnUI("hlelllll");
 
         Timer timer = new Timer();
         timer.schedule(new TimerTask() {
@@ -209,38 +213,86 @@ public class CallActivity extends AppCompatActivity {
         mPeerConnection.getStats(new RTCStatsCollectorCallback() {
             @Override
             public void onStatsDelivered(RTCStatsReport report) {
-                String audioRate = getAudioRate(report);
-                if (audioRate != null)
-                    audioRateOnUI(audioRate);
+                StringBuilder info = new StringBuilder();
+                int audioRate = getAudioBitrate(report);
+                if (audioRate != 0){
+                    info.append("音频码率: " + audioRate + " kbits/sec").append("\n");
+                }
+                int videoRate = getVideoBitrate(report);
+                if (videoRate != 0) {
+                    info.append("视频码率: " + videoRate + " kbits/sec").append("\n");
+                }
+                int audioClockRate = getAudioClockRate(report);
+                if (audioClockRate != 0) {
+                    info.append("音频采样率: " + audioClockRate + " HZ").append("\n");
+                }
+
+                infoOnUI(info.toString());
             }
         });
     }
 
-    private String getAudioRate(RTCStatsReport report) {
+    private int getAudioBitrate(RTCStatsReport report) {
         Map<String, RTCStats> statsMap = report.getStatsMap();
         for (RTCStats stats : statsMap.values()) {
             Map<String, Object> members = stats.getMembers();
+
             if (stats.getType().equals("inbound-rtp") && members.get("kind").toString().equals("audio")) {
                 double now = stats.getTimestampUs();
-                Log.e(TAG, "members: " + members.toString());
 
-                StringBuilder sb = new StringBuilder();
                 Long bytes = Long.parseLong(members.get("bytesReceived").toString());
-                sb.append(bytes - bytesPrev).append("bytes").append("\n");
-                sb.append(now - timestampPrev).append("us").append("\n");
-                double bitrate = 0;
-                if (timestampPrev != 0) {
-                    bitrate = (bytes - bytesPrev) * 1000000 / (now - timestampPrev);
-                    bitrate = Math.floor(bitrate);
+                int bitrate = 0;
+                if (audioTimestampPrev != 0) {
+                    bitrate = calBitRate(bytes - audioBytesPrev, now - audioTimestampPrev);
                 }
-                bytesPrev = bytes;
-                timestampPrev = now;
+                audioBytesPrev = bytes;
+                audioTimestampPrev = now;
 
-                sb.append(bitrate + " kb/sec");
-                return sb.toString();
+                Object codecId = members.get("codecId");
+                if (codecId != null)
+                    audioCodec = String.valueOf(codecId);
+
+                return bitrate;
             }
         }
-        return "hello";
+        return 0;
+    }
+
+    private int getVideoBitrate(RTCStatsReport report) {
+        Map<String, RTCStats> statsMap = report.getStatsMap();
+        for (RTCStats stats : statsMap.values()) {
+            Map<String, Object> members = stats.getMembers();
+
+            if (stats.getType().equals("inbound-rtp") && members.get("kind").toString().equals("video")) {
+                double now = stats.getTimestampUs();
+
+                Long bytes = Long.parseLong(members.get("bytesReceived").toString());
+                int bitrate = 0;
+                if (videoTimestampPrev != 0) {
+                    bitrate = calBitRate(bytes - videoBytesPrev, now - videoTimestampPrev);
+                }
+                videoBytesPrev = bytes;
+                videoTimestampPrev = now;
+
+                return bitrate;
+            }
+        }
+        return 0;
+    }
+
+
+    private static int calBitRate(long bytes, double timeDuration) {
+        return (int)Math.round(bytes * 1000 * 8 / timeDuration);
+    }
+
+    private int getAudioClockRate(RTCStatsReport report) {
+        if (audioCodec == null) {
+            return 0;
+        }
+        Map<String, RTCStats> statsMap = report.getStatsMap();
+        RTCStats audioCodecStats = statsMap.get(audioCodec);
+        Map<String, Object> members = audioCodecStats.getMembers();
+        return Integer.parseInt(String.valueOf(members.get("clockRate")));
     }
 
     public static class SimpleSdpObserver implements SdpObserver {
@@ -646,13 +698,13 @@ public class CallActivity extends AppCompatActivity {
         });
     }
 
-    private void audioRateOnUI(String msg) {
+    private void infoOnUI(String msg) {
         Log.i(TAG, msg);
         runOnUiThread(new Runnable() {
             @Override
             public void run() {
-                mAudioRateView.setText(msg);
-                mAudioRateView.setTextColor(Color.RED);
+                mInfoView.setText(msg);
+                mInfoView.setTextColor(Color.RED);
             }
         });
     }
